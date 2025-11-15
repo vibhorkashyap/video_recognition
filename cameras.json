@@ -1,0 +1,26 @@
+[
+  {
+    "ip": "192.168.0.100",
+    "port": 8000,
+    "rtsp_url": "rtsp://192.168.0.100:5543/live/channel0",
+    "profile_name": "PROFILE_1"
+  },
+  {
+    "ip": "192.168.0.101",
+    "port": 8000,
+    "rtsp_url": "rtsp://192.168.0.101:5543/live/channel0",
+    "profile_name": "PROFILE_1"
+  },
+  {
+    "ip": "192.168.0.102",
+    "port": 8000,
+    "rtsp_url": "rtsp://192.168.0.102:5543/live/channel0",
+    "profile_name": "PROFILE_1"
+  },
+  {
+    "ip": "192.168.0.118",
+    "port": 8000,
+    "rtsp_url": "rtsp://192.168.0.118:5543/live/channel0",
+    "profile_name": "PROFILE_1"
+  }
+]

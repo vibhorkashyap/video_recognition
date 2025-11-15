@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Streams</title>
+    <!-- HLS.js for browser HLS playback -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #000;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .time-bar {
+            background: rgba(0, 0, 0, 0.9);
+            border-bottom: 2px solid #667eea;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 600;
+            color: #667eea;
+            letter-spacing: 1px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .time-display {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            letter-spacing: 2px;
+        }
+
+        .camera-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 4px;
+            width: 100%;
+            flex: 1;
+            padding: 4px;
+        }
+
+        .camera-card {
+            position: relative;
+            background: #111;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            flex-grow: 1;
+        }
+
+        .video-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Green live bar at the top of video */
+        .live-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: transparent;
+            z-index: 11;
+            transition: background 0.3s ease;
+        }
+
+        .live-bar.active {
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+        }
+
+        .live-indicator {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: rgba(34, 197, 94, 0.9);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 9;
+            box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.7;
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .live-indicator.offline {
+            background: rgba(107, 114, 128, 0.8);
+            opacity: 0.5;
+        }
+
+        .live-indicator.offline .live-dot {
+            animation: none;
+            opacity: 0.4;
+        }
+
+        .info-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #667eea;
+            color: #667eea;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .info-btn:hover {
+            background: rgba(102, 126, 234, 0.3);
+            transform: scale(1.1);
+        }
+
+        .sync-btn {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            background: rgba(102, 126, 234, 0.8);
+            border: none;
+            color: white;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 10;
+            display: none;
+        }
+
+        .sync-btn:hover {
+            background: rgba(102, 126, 234, 1);
+            transform: scale(1.05);
+        }
+
+        .sync-btn.show {
+            display: block;
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #888;
+            z-index: 100;
+        }
+
+        .spinner {
+            border: 4px solid #333;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Modal for camera details */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background-color: #1a1f3a;
+            margin: 50px auto;
+            padding: 30px;
+            border: 2px solid #667eea;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close:hover {
+            color: #fff;
+        }
+
+        .modal h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            margin-top: 0;
+        }
+
+        .modal-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #333;
+            font-size: 0.95em;
+        }
+
+        .modal-row:last-child {
+            border-bottom: none;
+        }
+
+        .modal-label {
+            color: #999;
+            font-weight: 600;
+        }
+
+        .modal-value {
+            color: #667eea;
+            word-break: break-all;
+            text-align: right;
+            margin-left: 20px;
+            max-width: 50%;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-copy {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-copy:hover {
+            background: #764ba2;
+            transform: scale(1.02);
+        }
+
+        .btn-vlc {
+            background: #ff9500;
+            color: white;
+        }
+
+        .btn-vlc:hover {
+            background: #e67e00;
+            transform: scale(1.02);
+        }
+
+        @media (max-width: 1200px) {
+            .camera-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+            }
+
+            .camera-card {
+                padding-bottom: 56.25%; /* 16:9 aspect ratio */
+                height: auto;
+            }
+
+            .video-container {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Loading cameras...</p>
+    </div>
+
+    <!-- IST Time Display Bar -->
+    <div class="time-bar" id="timeBar">
+        <div class="time-display" id="istTime">--:--:-- IST</div>
+    </div>
+
+    <div id="camera-grid" class="camera-grid" style="display: none;"></div>
+
+    <!-- Modal for details -->
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">Camera Details</h2>
+            <div id="modalBody"></div>
+            <div class="modal-buttons">
+                <button class="modal-btn btn-copy" onclick="copyRTSP()">📋 Copy RTSP URL</button>
+                <button class="modal-btn btn-vlc" onclick="openVLC()">📺 Open in VLC</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api/cameras';
+        let cameras = [];
+        let currentCameraId = null;
+
+        // Update IST time display
+        function updateISTTime() {
+            const now = new Date();
+            // Convert to IST (UTC+5:30)
+            const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+            
+            // Format as HH:MM:SS IST
+            const hours = String(istTime.getHours()).padStart(2, '0');
+            const minutes = String(istTime.getMinutes()).padStart(2, '0');
+            const seconds = String(istTime.getSeconds()).padStart(2, '0');
+            
+            const timeString = `${hours}:${minutes}:${seconds} IST`;
+            document.getElementById('istTime').textContent = timeString;
+        }
+
+        // Update time every second
+        setInterval(updateISTTime, 1000);
+        updateISTTime(); // Initial call
+
+        async function loadCameras() {
+            try {
+                const response = await fetch(API_URL);
+                cameras = await response.json();
+                renderCameras();
+            } catch (error) {
+                console.error('Error loading cameras:', error);
+                document.getElementById('loading').innerHTML = 
+                    '<div style="color: #f87171;">❌ Failed to load cameras</div>';
+            }
+        }
+
+        function renderCameras() {
+            const grid = document.getElementById('camera-grid');
+            const loading = document.getElementById('loading');
+            
+            if (cameras.length === 0) {
+                loading.innerHTML = '<div style="color: #f87171;">❌ No cameras found</div>';
+                return;
+            }
+
+            grid.innerHTML = cameras.map((camera, index) => {
+                return `
+                    <div class="camera-card">
+                        <div class="video-container">
+                            <div class="live-bar" id="live-bar-${index}"></div>
+                            <video 
+                                id="video-${index}"
+                                preload="auto"
+                                data-camera-id="${index}"
+                                data-hls-url="${camera.hls_url}"
+                            >
+                                Your browser does not support the video tag.
+                            </video>
+                            <div class="live-indicator" id="live-${index}">
+                                <div class="live-dot"></div>
+                                <span>LIVE</span>
+                            </div>
+                            <button class="info-btn" onclick="showDetails(${index})" title="Show camera info">ⓘ</button>
+                            <button class="sync-btn" id="sync-${index}" onclick="syncToLive(${index})" title="Sync to live">↻ Live</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Initialize HLS players
+            cameras.forEach((camera, index) => {
+                const videoElement = document.getElementById(`video-${index}`);
+                if (videoElement && camera.hls_url) {
+                    initializeHLSPlayer(videoElement, camera.hls_url, index);
+                }
+            });
+
+            loading.style.display = 'none';
+            grid.style.display = 'grid';
+        }
+
+        function initializeHLSPlayer(videoElement, hlsUrl, cameraId) {
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    maxBufferLength: 30,  // Keep 30 seconds of buffer (was 10)
+                    maxMaxBufferLength: 60,  // Max buffer 60 seconds (was 20)
+                    maxBufferSize: 60 * 1000 * 1000,
+                    maxBufferHole: 0.5,
+                    fragLoadingTimeOut: 20000,
+                    manifestLoadingTimeOut: 10000,
+                    levelLoadingTimeOut: 10000,
+                    startLevel: 0, // Start with lowest latency level
+                    liveSyncDurationCount: 3,  // Use 3 segments for live sync (more stable)
+                });
+
+                hls.loadSource(hlsUrl);
+                hls.attachMedia(videoElement);
+                
+                // Store HLS instance for sync function
+                videoElement.hls = hls;
+                
+                // Mute to allow autoplay
+                videoElement.muted = true;
+
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    console.log(`✓ Stream loaded for camera ${cameraId}`);
+                    // Force play immediately
+                    const playPromise = videoElement.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            console.log(`Auto-play prevented for camera ${cameraId}, retrying...`);
+                            // Retry play after a short delay
+                            setTimeout(() => {
+                                videoElement.play().catch(e => {
+                                    console.log(`Retry failed for camera ${cameraId}`);
+                                });
+                            }, 500);
+                        });
+                    }
+                    updateSyncButtonVisibility(videoElement, cameraId);
+                });
+
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    if (data.fatal) {
+                        console.error(`✗ Fatal error for camera ${cameraId}:`, data);
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                hls.recoverMediaError();
+                                break;
+                        }
+                    }
+                });
+                
+                // Monitor playback to show sync button when delayed
+                videoElement.addEventListener('play', () => {
+                    updateSyncButtonVisibility(videoElement, cameraId);
+                    updateLiveIndicator(videoElement, cameraId);
+                });
+                videoElement.addEventListener('timeupdate', () => {
+                    updateSyncButtonVisibility(videoElement, cameraId);
+                    updateLiveIndicator(videoElement, cameraId);
+                });
+                videoElement.addEventListener('pause', () => {
+                    // Auto-resume if paused (for live feed)
+                    setTimeout(() => {
+                        if (videoElement.paused) {
+                            videoElement.play().catch(e => {
+                                console.log(`Resume failed for camera ${cameraId}`);
+                            });
+                        }
+                    }, 1000);
+                });
+                
+                // Update live indicator periodically
+                setInterval(() => {
+                    updateLiveIndicator(videoElement, cameraId);
+                }, 500);
+            } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari native HLS support
+                videoElement.src = hlsUrl;
+                videoElement.muted = true;
+                const playPromise = videoElement.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.log(`Auto-play prevented for camera ${cameraId}`);
+                    });
+                }
+            }
+        }
+
+        function updateSyncButtonVisibility(videoElement, cameraId) {
+            if (!videoElement.hls) return;
+            
+            const syncBtn = document.getElementById(`sync-${cameraId}`);
+            if (!syncBtn) return;
+            
+            // Show button if buffered has content and video is playing
+            if (videoElement.buffered.length > 0) {
+                const bufferedEnd = videoElement.buffered.end(videoElement.buffered.length - 1);
+                const currentTime = videoElement.currentTime;
+                const delay = bufferedEnd - currentTime;
+                
+                // Show button if delay is more than 2 seconds
+                if (delay > 2) {
+                    syncBtn.classList.add('show');
+                } else {
+                    syncBtn.classList.remove('show');
+                }
+            }
+        }
+
+        // Track live status per camera with hysteresis to prevent flickering
+        const liveStatusCache = {};
+        let lastISTTime = null;  // Store last IST time for comparison
+
+        function updateLiveIndicator(videoElement, cameraId) {
+            const liveIndicator = document.getElementById(`live-${cameraId}`);
+            const liveBar = document.getElementById(`live-bar-${cameraId}`);
+            if (!liveIndicator) return;
+            
+            // Force indicator to always be visible
+            liveIndicator.style.display = 'flex';
+            liveIndicator.style.opacity = '1';
+            liveIndicator.style.visibility = 'visible';
+            
+            // Initialize cache if needed
+            if (!liveStatusCache[cameraId]) {
+                liveStatusCache[cameraId] = { isLive: false, stableFrames: 0, showLiveBar: false };
+            }
+            
+            let shouldBeLive = false;
+            let showLiveBar = false;
+            
+            // Check if video is playing and has buffered data
+            if (!videoElement.paused && videoElement.readyState >= 2 && videoElement.buffered.length > 0) {
+                const bufferedEnd = videoElement.buffered.end(videoElement.buffered.length - 1);
+                const currentTime = videoElement.currentTime;
+                const delay = bufferedEnd - currentTime;
+                
+                // LIVE if delay is less than 10 seconds and positive
+                if (delay < 10 && delay >= 0) {
+                    shouldBeLive = true;
+                }
+                
+                // Green bar: Show if timestamp is within 10 seconds of current IST time
+                // Get current IST time
+                const now = new Date();
+                const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+                lastISTTime = istNow;
+                
+                // Estimate stream timestamp based on buffer delay
+                // If we have 30 seconds delay, the stream is 30 seconds behind real time
+                const estimatedStreamTime = new Date(istNow.getTime() - (delay * 1000));
+                const timeOffsetSeconds = Math.abs(istNow.getTime() - estimatedStreamTime.getTime()) / 1000;
+                
+                // Show green bar if within 10 seconds of IST time
+                if (timeOffsetSeconds < 10) {
+                    showLiveBar = true;
+                }
+            }
+            
+            // Hysteresis: require 2 consistent readings before changing status
+            const cache = liveStatusCache[cameraId];
+            if (shouldBeLive === cache.isLive) {
+                cache.stableFrames++;
+            } else {
+                cache.stableFrames = 1;
+            }
+            
+            // Change status only after 2 consistent readings (= ~1 second at 500ms updates)
+            if (cache.stableFrames >= 2) {
+                cache.isLive = shouldBeLive;
+                cache.stableFrames = 0;
+            }
+            
+            // Apply class based on stable status
+            if (cache.isLive) {
+                liveIndicator.classList.remove('offline');
+            } else {
+                liveIndicator.classList.add('offline');
+            }
+            
+            // Update live bar - show green bar if within 10 seconds of IST time
+            if (liveBar) {
+                if (showLiveBar) {
+                    liveBar.classList.add('active');
+                } else {
+                    liveBar.classList.remove('active');
+                }
+            }
+        }
+
+        function syncToLive(cameraId) {
+            const videoElement = document.getElementById(`video-${cameraId}`);
+            if (!videoElement || !videoElement.hls) return;
+            
+            // Get the latest segment time from HLS
+            const hls = videoElement.hls;
+            if (hls.media && hls.media.duration) {
+                // Jump to near the end (leave 1 second buffer)
+                videoElement.currentTime = Math.max(0, hls.media.duration - 1);
+                videoElement.play().catch(error => {
+                    console.log(`Auto-play prevented for camera ${cameraId}`);
+                });
+                document.getElementById(`sync-${cameraId}`).classList.remove('show');
+            }
+        }
+
+        function showDetails(cameraId) {
+            const camera = cameras[cameraId];
+            currentCameraId = cameraId;
+            
+            const modal = document.getElementById('detailsModal');
+            document.getElementById('modalTitle').textContent = `Camera ${cameraId + 1} - ${camera.ip}`;
+            
+            document.getElementById('modalBody').innerHTML = `
+                <div class="modal-row">
+                    <span class="modal-label">IP Address</span>
+                    <span class="modal-value">${camera.ip}</span>
+                </div>
+                <div class="modal-row">
+                    <span class="modal-label">Port</span>
+                    <span class="modal-value">${camera.port}</span>
+                </div>
+                <div class="modal-row">
+                    <span class="modal-label">Profile</span>
+                    <span class="modal-value">${camera.profile_name || 'Main'}</span>
+                </div>
+                <div class="modal-row">
+                    <span class="modal-label">RTSP URL</span>
+                    <span class="modal-value">${camera.rtsp_url}</span>
+                </div>
+                <div class="modal-row">
+                    <span class="modal-label">HLS URL</span>
+                    <span class="modal-value">${camera.hls_url}</span>
+                </div>
+            `;
+            
+            modal.style.display = 'block';
+        }
+
+        function copyRTSP() {
+            const camera = cameras[currentCameraId];
+            navigator.clipboard.writeText(camera.rtsp_url).then(() => {
+                alert('RTSP URL copied to clipboard!');
+            }).catch(() => {
+                alert('Failed to copy URL');
+            });
+        }
+
+        function openVLC() {
+            const camera = cameras[currentCameraId];
+            window.location.href = camera.rtsp_url;
+        }
+
+        // Modal close handlers
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('detailsModal');
+            const closeBtn = document.querySelector('.close');
+            
+            closeBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
+            
+            window.onclick = (event) => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            };
+            
+            loadCameras();
+        });
+    </script>
+</body>
+</html>

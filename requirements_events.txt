@@ -1,0 +1,29 @@
+# Core dependencies
+Flask==2.3.3
+Werkzeug==2.3.7
+python-dotenv==1.0.0
+
+# Video streaming
+# Note: FFmpeg is called via subprocess, no Python package needed
+
+# Motion detection
+opencv-python>=4.8.0
+numpy>=1.24.3
+
+# LLM Integration
+openai>=0.27.0
+
+# Optional: For local LLM support (Ollama)
+# ollama==0.0.11
+
+# Database (future)
+# SQLAlchemy==2.0.20
+# psycopg2-binary==2.9.7
+
+# API clients
+requests>=2.31.0
+
+# Development (optional)
+black>=23.9.1
+flake8>=6.1.0
+pytest>=7.4.2
