@@ -1,0 +1,44 @@
+.fetching-loader-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(16, 163, 127, 0.08);
+  border: 1px solid rgba(16, 163, 127, 0.3);
+  border-radius: 12px;
+  margin: 8px 0;
+  animation: slideIn 0.3s ease-out;
+}
+
+.fetching-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(16, 163, 127, 0.2);
+  border-top-color: #34d399;
+  border-right-color: rgba(16, 163, 127, 0.1);
+  border-radius: 50%;
+  animation: spinnerRotate 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.fetching-text {
+  font-size: 13px;
+  color: #9de5c8;
+  font-weight: 500;
+}
+
+@keyframes spinnerRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
